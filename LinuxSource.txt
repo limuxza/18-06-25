@@ -1,0 +1,1229 @@
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local SoundService = game:GetService("SoundService")
+local LocalPlayer = Players.LocalPlayer
+
+local Nexus = {
+    Version = "2.0.0",
+    Themes = {},
+    CurrentTheme = "Dark",
+    Sounds = true,
+    Animations = true,
+    SavedElements = {},
+    ConfigFolder = "NexusUI_Configs"
+}
+
+local Themes = {
+    Dark = {
+        Primary = Color3.fromRGB(15, 15, 20),
+        Secondary = Color3.fromRGB(25, 25, 35),
+        Accent = Color3.fromRGB(100, 150, 255),
+        AccentHover = Color3.fromRGB(120, 170, 255),
+        Text = Color3.fromRGB(255, 255, 255),
+        TextSecondary = Color3.fromRGB(180, 180, 190),
+        Border = Color3.fromRGB(45, 45, 55),
+        Success = Color3.fromRGB(50, 200, 100),
+        Warning = Color3.fromRGB(255, 200, 50),
+        Error = Color3.fromRGB(255, 100, 100),
+        Background = Color3.fromRGB(10, 10, 15)
+    },
+    Light = {
+        Primary = Color3.fromRGB(250, 250, 255),
+        Secondary = Color3.fromRGB(240, 240, 250),
+        Accent = Color3.fromRGB(70, 120, 255),
+        AccentHover = Color3.fromRGB(90, 140, 255),
+        Text = Color3.fromRGB(20, 20, 30),
+        TextSecondary = Color3.fromRGB(80, 80, 100),
+        Border = Color3.fromRGB(200, 200, 220),
+        Success = Color3.fromRGB(40, 180, 80),
+        Warning = Color3.fromRGB(255, 180, 30),
+        Error = Color3.fromRGB(255, 80, 80),
+        Background = Color3.fromRGB(245, 245, 255)
+    },
+    Neon = {
+        Primary = Color3.fromRGB(5, 5, 15),
+        Secondary = Color3.fromRGB(15, 15, 25),
+        Accent = Color3.fromRGB(255, 50, 150),
+        AccentHover = Color3.fromRGB(255, 70, 170),
+        Text = Color3.fromRGB(255, 255, 255),
+        TextSecondary = Color3.fromRGB(200, 200, 220),
+        Border = Color3.fromRGB(255, 50, 150),
+        Success = Color3.fromRGB(50, 255, 150),
+        Warning = Color3.fromRGB(255, 255, 50),
+        Error = Color3.fromRGB(255, 50, 50),
+        Background = Color3.fromRGB(0, 0, 10)
+    }
+}
+
+Nexus.Themes = Themes
+
+function Nexus:GetTheme()
+    return Themes[self.CurrentTheme] or Themes.Dark
+end
+
+function Nexus:SetTheme(themeName)
+    if Themes[themeName] then
+        self.CurrentTheme = themeName
+        return true
+    end
+    return false
+end
+
+function Nexus:PlaySound(soundId, volume)
+    if not self.Sounds then return end
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://" .. soundId
+    sound.Volume = volume or 0.5
+    sound.Parent = SoundService
+    sound:Play()
+    sound.Ended:Connect(function()
+        sound:Destroy()
+    end)
+end
+
+function Nexus:Tween(object, properties, duration, style, direction)
+    if not self.Animations then
+        for prop, value in pairs(properties) do
+            object[prop] = value
+        end
+        return
+    end
+    
+    local tweenInfo = TweenInfo.new(
+        duration or 0.3,
+        style or Enum.EasingStyle.Quad,
+        direction or Enum.EasingDirection.Out
+    )
+    
+    local tween = TweenService:Create(object, tweenInfo, properties)
+    tween:Play()
+    return tween
+end
+
+function Nexus:SafeCallback(callback, ...)
+    if not callback then return end
+    local success, error = pcall(callback, ...)
+    if not success then
+        warn("Nexus UI Callback Error: " .. tostring(error))
+    end
+end
+
+function Nexus:CreateElement(className, properties)
+    local element = Instance.new(className)
+    for property, value in pairs(properties or {}) do
+        element[property] = value
+    end
+    return element
+end
+
+function Nexus:CreateGradient(parent, colors, rotation)
+    local gradient = self:CreateElement("UIGradient", {
+        Parent = parent,
+        Color = ColorSequence.new(colors),
+        Rotation = rotation or 0
+    })
+    return gradient
+end
+
+function Nexus:CreateCorner(parent, radius)
+    return self:CreateElement("UICorner", {
+        Parent = parent,
+        CornerRadius = UDim.new(0, radius or 8)
+    })
+end
+
+function Nexus:CreateStroke(parent, color, thickness)
+    return self:CreateElement("UIStroke", {
+        Parent = parent,
+        Color = color or self:GetTheme().Border,
+        Thickness = thickness or 1,
+        Transparency = 0.3
+    })
+end
+
+function Nexus:CreateShadow(parent)
+    local shadow = self:CreateElement("ImageLabel", {
+        Parent = parent,
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://1316045217",
+        ImageColor3 = Color3.fromRGB(0, 0, 0),
+        ImageTransparency = 0.8,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(10, 10, 118, 118),
+        Size = UDim2.new(1, 20, 1, 20),
+        Position = UDim2.new(0, -10, 0, -10),
+        ZIndex = parent.ZIndex - 1
+    })
+    return shadow
+end
+
+function Nexus:Notify(config)
+    local theme = self:GetTheme()
+    local notificationGui = self:CreateElement("ScreenGui", {
+        Name = "NexusNotification",
+        Parent = game:GetService("CoreGui"),
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    })
+    
+    local notification = self:CreateElement("Frame", {
+        Parent = notificationGui,
+        BackgroundColor3 = theme.Secondary,
+        BackgroundTransparency = 0.1,
+        Size = UDim2.new(0, 350, 0, 80),
+        Position = UDim2.new(1, 20, 0, 50),
+        ZIndex = 100
+    })
+    
+    self:CreateCorner(notification, 12)
+    self:CreateStroke(notification, theme.Border, 1)
+    self:CreateShadow(notification)
+    
+    local blur = self:CreateElement("Frame", {
+        Parent = notification,
+        BackgroundColor3 = theme.Primary,
+        BackgroundTransparency = 0.3,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 101
+    })
+    self:CreateCorner(blur, 12)
+    
+    local icon = self:CreateElement("ImageLabel", {
+        Parent = notification,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0, 24, 0, 24),
+        Position = UDim2.new(0, 16, 0, 16),
+        Image = config.Icon or "rbxassetid://3926305904",
+        ImageColor3 = config.Type == "error" and theme.Error or 
+                     config.Type == "warning" and theme.Warning or 
+                     config.Type == "success" and theme.Success or theme.Accent,
+        ZIndex = 102
+    })
+    
+    local title = self:CreateElement("TextLabel", {
+        Parent = notification,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -100, 0, 20),
+        Position = UDim2.new(0, 50, 0, 12),
+        Font = Enum.Font.GothamBold,
+        Text = config.Title or "Notification",
+        TextColor3 = theme.Text,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 102
+    })
+    
+    local content = self:CreateElement("TextLabel", {
+        Parent = notification,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -100, 0, 16),
+        Position = UDim2.new(0, 50, 0, 35),
+        Font = Enum.Font.Gotham,
+        Text = config.Content or "Content",
+        TextColor3 = theme.TextSecondary,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextWrapped = true,
+        ZIndex = 102
+    })
+    
+    local closeButton = self:CreateElement("TextButton", {
+        Parent = notification,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0, 20, 0, 20),
+        Position = UDim2.new(1, -30, 0, 10),
+        Font = Enum.Font.GothamBold,
+        Text = "×",
+        TextColor3 = theme.TextSecondary,
+        TextSize = 16,
+        ZIndex = 102
+    })
+    
+    local progressBar = self:CreateElement("Frame", {
+        Parent = notification,
+        BackgroundColor3 = theme.Accent,
+        Size = UDim2.new(1, 0, 0, 2),
+        Position = UDim2.new(0, 0, 1, -2),
+        BorderSizePixel = 0,
+        ZIndex = 102
+    })
+    
+    self:Tween(notification, {Position = UDim2.new(1, -370, 0, 50)}, 0.5, Enum.EasingStyle.Back)
+    
+    closeButton.MouseButton1Click:Connect(function()
+        self:Tween(notification, {Position = UDim2.new(1, 20, 0, 50)}, 0.3)
+        task.wait(0.3)
+        notificationGui:Destroy()
+    end)
+    
+    if config.Duration then
+        self:Tween(progressBar, {Size = UDim2.new(0, 0, 0, 2)}, config.Duration, Enum.EasingStyle.Linear)
+        task.delay(config.Duration, function()
+            if notificationGui.Parent then
+                self:Tween(notification, {Position = UDim2.new(1, 20, 0, 50)}, 0.3)
+                task.wait(0.3)
+                notificationGui:Destroy()
+            end
+        end)
+    end
+    
+    self:PlaySound("6895079853", 0.3)
+end
+
+function Nexus:SaveConfig(name, elements)
+    if not name or name == "" then return false end
+    
+    local configData = {
+        Name = name,
+        Theme = self.CurrentTheme,
+        Elements = {},
+        Timestamp = os.time()
+    }
+    
+    for _, elementData in pairs(elements or self.SavedElements) do
+        if elementData.GetValue then
+            local value = elementData.GetValue()
+            if value ~= nil then
+                table.insert(configData.Elements, {
+                    Type = elementData.Type,
+                    Name = elementData.Name,
+                    Value = value
+                })
+            end
+        end
+    end
+    
+    local success, result = pcall(function()
+        if writefile then
+            if not isfolder(self.ConfigFolder) then
+                makefolder(self.ConfigFolder)
+            end
+            writefile(self.ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(configData))
+            return true
+        end
+        return false
+    end)
+    
+    return success
+end
+
+function Nexus:LoadConfig(name, elements)
+    if not name or name == "" then return false end
+    
+    local success, result = pcall(function()
+        if readfile and isfile(self.ConfigFolder .. "/" .. name .. ".json") then
+            local configData = HttpService:JSONDecode(readfile(self.ConfigFolder .. "/" .. name .. ".json"))
+            
+            if configData.Theme then
+                self:SetTheme(configData.Theme)
+            end
+            
+            for _, elementInfo in pairs(configData.Elements) do
+                for _, elementData in pairs(elements or self.SavedElements) do
+                    if elementData.Type == elementInfo.Type and elementData.Name == elementInfo.Name then
+                        if elementData.SetValue then
+                            elementData.SetValue(elementInfo.Value)
+                        end
+                        break
+                    end
+                end
+            end
+            
+            return true
+        end
+        return false
+    end)
+    
+    return success
+end
+
+function Nexus:Create(config)
+    local theme = self:GetTheme()
+    local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+    
+    for _, gui in pairs(game:GetService("CoreGui"):GetChildren()) do
+        if gui.Name == "NexusUI" then
+            gui:Destroy()
+        end
+    end
+    
+    local screenGui = self:CreateElement("ScreenGui", {
+        Name = "NexusUI",
+        Parent = game:GetService("CoreGui"),
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    })
+    
+    local mainFrame = self:CreateElement("Frame", {
+        Parent = screenGui,
+        BackgroundColor3 = theme.Primary,
+        BackgroundTransparency = 0.05,
+        Size = config.Size or (isMobile and UDim2.new(0, 400, 0, 500) or UDim2.new(0, 600, 0, 400)),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Active = true,
+        ZIndex = 1
+    })
+    
+    self:CreateCorner(mainFrame, 16)
+    self:CreateStroke(mainFrame, theme.Border, 2)
+    self:CreateShadow(mainFrame)
+    
+    local blur = self:CreateElement("Frame", {
+        Parent = mainFrame,
+        BackgroundColor3 = theme.Background,
+        BackgroundTransparency = 0.2,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 2
+    })
+    self:CreateCorner(blur, 16)
+    
+    local topBar = self:CreateElement("Frame", {
+        Parent = mainFrame,
+        BackgroundColor3 = theme.Secondary,
+        BackgroundTransparency = 0.1,
+        Size = UDim2.new(1, 0, 0, 50),
+        ZIndex = 3
+    })
+    self:CreateCorner(topBar, 16)
+    
+    local topBarBlur = self:CreateElement("Frame", {
+        Parent = topBar,
+        BackgroundColor3 = theme.Primary,
+        BackgroundTransparency = 0.3,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 4
+    })
+    self:CreateCorner(topBarBlur, 16)
+    
+    local titleLabel = self:CreateElement("TextLabel", {
+        Parent = topBar,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -100, 1, 0),
+        Position = UDim2.new(0, 20, 0, 0),
+        Font = Enum.Font.GothamBold,
+        Text = config.Name or "Nexus UI",
+        TextColor3 = theme.Text,
+        TextSize = 18,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 5
+    })
+    
+    local minimizeButton = self:CreateElement("TextButton", {
+        Parent = topBar,
+        BackgroundColor3 = theme.Warning,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(1, -70, 0.5, -6),
+        Font = Enum.Font.GothamBold,
+        Text = "",
+        ZIndex = 5
+    })
+    self:CreateCorner(minimizeButton, 6)
+    
+    local closeButton = self:CreateElement("TextButton", {
+        Parent = topBar,
+        BackgroundColor3 = theme.Error,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(1, -50, 0.5, -6),
+        Font = Enum.Font.GothamBold,
+        Text = "",
+        ZIndex = 5
+    })
+    self:CreateCorner(closeButton, 6)
+    
+    local themeButton = self:CreateElement("TextButton", {
+        Parent = topBar,
+        BackgroundColor3 = theme.Accent,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(1, -30, 0.5, -6),
+        Font = Enum.Font.GothamBold,
+        Text = "",
+        ZIndex = 5
+    })
+    self:CreateCorner(themeButton, 6)
+    
+    local sidebar = self:CreateElement("Frame", {
+        Parent = mainFrame,
+        BackgroundColor3 = theme.Secondary,
+        BackgroundTransparency = 0.2,
+        Size = UDim2.new(0, 200, 1, -50),
+        Position = UDim2.new(0, 0, 0, 50),
+        ZIndex = 3
+    })
+    
+    local sidebarBlur = self:CreateElement("Frame", {
+        Parent = sidebar,
+        BackgroundColor3 = theme.Primary,
+        BackgroundTransparency = 0.4,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 4
+    })
+    
+    local tabContainer = self:CreateElement("ScrollingFrame", {
+        Parent = sidebar,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -10, 1, -20),
+        Position = UDim2.new(0, 5, 0, 10),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = theme.Accent,
+        ZIndex = 5
+    })
+    
+    local tabLayout = self:CreateElement("UIListLayout", {
+        Parent = tabContainer,
+        Padding = UDim.new(0, 5),
+        SortOrder = Enum.SortOrder.LayoutOrder
+    })
+    
+    local contentFrame = self:CreateElement("Frame", {
+        Parent = mainFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -200, 1, -50),
+        Position = UDim2.new(0, 200, 0, 50),
+        ZIndex = 3
+    })
+    
+    local dragConnection
+    local dragging = false
+    
+    topBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            local startPos = input.Position
+            local startFramePos = mainFrame.Position
+            
+            dragConnection = UserInputService.InputChanged:Connect(function(input2)
+                if input2.UserInputType == Enum.UserInputType.MouseMovement or input2.UserInputType == Enum.UserInputType.Touch then
+                    local delta = input2.Position - startPos
+                    mainFrame.Position = UDim2.new(
+                        startFramePos.X.Scale,
+                        startFramePos.X.Offset + delta.X,
+                        startFramePos.Y.Scale,
+                        startFramePos.Y.Offset + delta.Y
+                    )
+                end
+            end)
+        end
+    end)
+    
+    topBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if dragConnection then
+                dragConnection:Disconnect()
+            end
+        end
+    end)
+    
+    local isMinimized = false
+    local originalSize = mainFrame.Size
+    
+    minimizeButton.MouseButton1Click:Connect(function()
+        isMinimized = not isMinimized
+        self:PlaySound("6895079853", 0.2)
+        
+        if isMinimized then
+            self:Tween(mainFrame, {Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 50)}, 0.3)
+        else
+            self:Tween(mainFrame, {Size = originalSize}, 0.3)
+        end
+    end)
+    
+    closeButton.MouseButton1Click:Connect(function()
+        self:PlaySound("131961136", 0.3)
+        self:Tween(mainFrame, {
+            Size = UDim2.new(0, 0, 0, 0),
+            BackgroundTransparency = 1
+        }, 0.3)
+        task.wait(0.3)
+        screenGui:Destroy()
+    end)
+    
+    local themeIndex = 1
+    local themeNames = {"Dark", "Light", "Neon"}
+    
+    themeButton.MouseButton1Click:Connect(function()
+        themeIndex = themeIndex % #themeNames + 1
+        self:SetTheme(themeNames[themeIndex])
+        self:PlaySound("6895079853", 0.2)
+        
+        self:Notify({
+            Title = "Theme Changed",
+            Content = "Switched to " .. themeNames[themeIndex] .. " theme",
+            Duration = 2,
+            Type = "success"
+        })
+    end)
+    
+    UserInputService.InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.RightControl then
+            mainFrame.Visible = not mainFrame.Visible
+        end
+    end)
+    
+    local Library = {
+        MainFrame = mainFrame,
+        ContentFrame = contentFrame,
+        TabContainer = tabContainer,
+        Tabs = {},
+        CurrentTab = nil
+    }
+    
+    function Library:Tab(config)
+        local theme = Nexus:GetTheme()
+        local tabButton = Nexus:CreateElement("TextButton", {
+            Parent = tabContainer,
+            BackgroundColor3 = theme.Secondary,
+            BackgroundTransparency = 0.3,
+            Size = UDim2.new(1, 0, 0, 40),
+            Font = Enum.Font.GothamSemibold,
+            Text = "",
+            TextColor3 = theme.Text,
+            TextSize = 14,
+            ZIndex = 6,
+            LayoutOrder = #self.Tabs + 1
+        })
+        
+        Nexus:CreateCorner(tabButton, 8)
+        Nexus:CreateStroke(tabButton, theme.Border, 1)
+        
+        local tabIcon = Nexus:CreateElement("ImageLabel", {
+            Parent = tabButton,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 20, 0, 20),
+            Position = UDim2.new(0, 10, 0.5, -10),
+            Image = config.Icon or "rbxassetid://3926305904",
+            ImageColor3 = theme.TextSecondary,
+            ZIndex = 7
+        })
+        
+        local tabLabel = Nexus:CreateElement("TextLabel", {
+            Parent = tabButton,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -45, 1, 0),
+            Position = UDim2.new(0, 40, 0, 0),
+            Font = Enum.Font.GothamSemibold,
+            Text = config.Name or "Tab",
+            TextColor3 = theme.TextSecondary,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 7
+        })
+        
+        local tabContent = Nexus:CreateElement("ScrollingFrame", {
+            Parent = contentFrame,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -20, 1, -20),
+            Position = UDim2.new(0, 10, 0, 10),
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollBarThickness = 4,
+            ScrollBarImageColor3 = theme.Accent,
+            Visible = false,
+            ZIndex = 4
+        })
+        
+        local contentLayout = Nexus:CreateElement("UIListLayout", {
+            Parent = tabContent,
+            Padding = UDim.new(0, 8),
+            SortOrder = Enum.SortOrder.LayoutOrder
+        })
+        
+        local function selectTab()
+            for _, tab in pairs(self.Tabs) do
+                tab.Content.Visible = false
+                Nexus:Tween(tab.Button, {BackgroundTransparency = 0.3}, 0.2)
+                Nexus:Tween(tab.Icon, {ImageColor3 = theme.TextSecondary}, 0.2)
+                Nexus:Tween(tab.Label, {TextColor3 = theme.TextSecondary}, 0.2)
+            end
+            
+            tabContent.Visible = true
+            Nexus:Tween(tabButton, {BackgroundTransparency = 0.1}, 0.2)
+            Nexus:Tween(tabIcon, {ImageColor3 = theme.Accent}, 0.2)
+            Nexus:Tween(tabLabel, {TextColor3 = theme.Text}, 0.2)
+            
+            self.CurrentTab = config.Name
+            Nexus:PlaySound("6895079853", 0.1)
+        end
+        
+        tabButton.MouseButton1Click:Connect(selectTab)
+        
+        tabButton.MouseEnter:Connect(function()
+            if self.CurrentTab ~= config.Name then
+                Nexus:Tween(tabButton, {BackgroundTransparency = 0.2}, 0.2)
+            end
+        end)
+        
+        tabButton.MouseLeave:Connect(function()
+            if self.CurrentTab ~= config.Name then
+                Nexus:Tween(tabButton, {BackgroundTransparency = 0.3}, 0.2)
+            end
+        end)
+        
+        local tab = {
+            Name = config.Name,
+            Button = tabButton,
+            Icon = tabIcon,
+            Label = tabLabel,
+            Content = tabContent,
+            Elements = {}
+        }
+        
+        table.insert(self.Tabs, tab)
+        
+        if #self.Tabs == 1 then
+            selectTab()
+        end
+        
+        local TabElements = {}
+        
+        function TabElements:Section(config)
+            local theme = Nexus:GetTheme()
+            local section = Nexus:CreateElement("Frame", {
+                Parent = tabContent,
+                BackgroundColor3 = theme.Secondary,
+                BackgroundTransparency = 0.2,
+                Size = UDim2.new(1, 0, 0, 35),
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            Nexus:CreateCorner(section, 8)
+            Nexus:CreateStroke(section, theme.Border, 1)
+            
+            local sectionLabel = Nexus:CreateElement("TextLabel", {
+                Parent = section,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -20, 1, 0),
+                Position = UDim2.new(0, 15, 0, 0),
+                Font = Enum.Font.GothamBold,
+                Text = config.Name or "Section",
+                TextColor3 = theme.Text,
+                TextSize = 16,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 6
+            })
+            
+            table.insert(tab.Elements, {Type = "Section", Name = config.Name, Instance = section})
+            return section
+        end
+        
+        function TabElements:Button(config)
+            local theme = Nexus:GetTheme()
+            local button = Nexus:CreateElement("TextButton", {
+                Parent = tabContent,
+                BackgroundColor3 = theme.Accent,
+                BackgroundTransparency = 0.1,
+                Size = UDim2.new(1, 0, 0, 40),
+                Font = Enum.Font.GothamSemibold,
+                Text = config.Name or "Button",
+                TextColor3 = theme.Text,
+                TextSize = 14,
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            Nexus:CreateCorner(button, 8)
+            Nexus:CreateStroke(button, theme.Accent, 1)
+            
+            local gradient = Nexus:CreateGradient(button, {
+                ColorSequenceKeypoint.new(0, theme.Accent),
+                ColorSequenceKeypoint.new(1, theme.AccentHover)
+            }, 45)
+            
+            button.MouseButton1Click:Connect(function()
+                Nexus:Tween(button, {Size = UDim2.new(1, -4, 0, 36)}, 0.1)
+                Nexus:Tween(button, {Size = UDim2.new(1, 0, 0, 40)}, 0.1)
+                Nexus:PlaySound("6895079853", 0.3)
+                Nexus:SafeCallback(config.Callback)
+            end)
+            
+            button.MouseEnter:Connect(function()
+                Nexus:Tween(button, {BackgroundTransparency = 0.05}, 0.2)
+            end)
+            
+            button.MouseLeave:Connect(function()
+                Nexus:Tween(button, {BackgroundTransparency = 0.1}, 0.2)
+            end)
+            
+            table.insert(tab.Elements, {Type = "Button", Name = config.Name, Instance = button})
+            return button
+        end
+        
+        function TabElements:Toggle(config)
+            local theme = Nexus:GetTheme()
+            local toggleFrame = Nexus:CreateElement("Frame", {
+                Parent = tabContent,
+                BackgroundColor3 = theme.Secondary,
+                BackgroundTransparency = 0.2,
+                Size = UDim2.new(1, 0, 0, 40),
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            Nexus:CreateCorner(toggleFrame, 8)
+            Nexus:CreateStroke(toggleFrame, theme.Border, 1)
+            
+            local toggleLabel = Nexus:CreateElement("TextLabel", {
+                Parent = toggleFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -60, 1, 0),
+                Position = UDim2.new(0, 15, 0, 0),
+                Font = Enum.Font.GothamSemibold,
+                Text = config.Name or "Toggle",
+                TextColor3 = theme.Text,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 6
+            })
+            
+            local toggleButton = Nexus:CreateElement("TextButton", {
+                Parent = toggleFrame,
+                BackgroundColor3 = theme.Border,
+                Size = UDim2.new(0, 40, 0, 20),
+                Position = UDim2.new(1, -50, 0.5, -10),
+                Text = "",
+                ZIndex = 6
+            })
+            
+            Nexus:CreateCorner(toggleButton, 10)
+            
+            local toggleKnob = Nexus:CreateElement("Frame", {
+                Parent = toggleButton,
+                BackgroundColor3 = theme.Text,
+                Size = UDim2.new(0, 16, 0, 16),
+                Position = UDim2.new(0, 2, 0.5, -8),
+                ZIndex = 7
+            })
+            
+            Nexus:CreateCorner(toggleKnob, 8)
+            
+            local state = config.Default or false
+            
+            local function updateToggle()
+                if state then
+                    Nexus:Tween(toggleButton, {BackgroundColor3 = theme.Accent}, 0.2)
+                    Nexus:Tween(toggleKnob, {Position = UDim2.new(1, -18, 0.5, -8)}, 0.2)
+                else
+                    Nexus:Tween(toggleButton, {BackgroundColor3 = theme.Border}, 0.2)
+                    Nexus:Tween(toggleKnob, {Position = UDim2.new(0, 2, 0.5, -8)}, 0.2)
+                end
+                Nexus:SafeCallback(config.Callback, state)
+            end
+            
+            toggleButton.MouseButton1Click:Connect(function()
+                state = not state
+                updateToggle()
+                Nexus:PlaySound("6895079853", 0.2)
+            end)
+            
+            updateToggle()
+            
+            local element = {
+                Type = "Toggle",
+                Name = config.Name,
+                Instance = toggleFrame,
+                GetValue = function() return state end,
+                SetValue = function(newState) 
+                    state = newState
+                    updateToggle()
+                end
+            }
+            
+            table.insert(tab.Elements, element)
+            table.insert(Nexus.SavedElements, element)
+            return toggleFrame
+        end
+        
+        function TabElements:Slider(config)
+            local theme = Nexus:GetTheme()
+            local sliderFrame = Nexus:CreateElement("Frame", {
+                Parent = tabContent,
+                BackgroundColor3 = theme.Secondary,
+                BackgroundTransparency = 0.2,
+                Size = UDim2.new(1, 0, 0, 60),
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            Nexus:CreateCorner(sliderFrame, 8)
+            Nexus:CreateStroke(sliderFrame, theme.Border, 1)
+            
+            local sliderLabel = Nexus:CreateElement("TextLabel", {
+                Parent = sliderFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0.7, 0, 0, 20),
+                Position = UDim2.new(0, 15, 0, 8),
+                Font = Enum.Font.GothamSemibold,
+                Text = config.Name or "Slider",
+                TextColor3 = theme.Text,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 6
+            })
+            
+            local valueLabel = Nexus:CreateElement("TextLabel", {
+                Parent = sliderFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0.3, 0, 0, 20),
+                Position = UDim2.new(0.7, 0, 0, 8),
+                Font = Enum.Font.GothamBold,
+                Text = tostring(config.Default or config.Min or 0),
+                TextColor3 = theme.Accent,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Right,
+                ZIndex = 6
+            })
+            
+            local sliderTrack = Nexus:CreateElement("Frame", {
+                Parent = sliderFrame,
+                BackgroundColor3 = theme.Border,
+                Size = UDim2.new(1, -30, 0, 4),
+                Position = UDim2.new(0, 15, 0, 40),
+                ZIndex = 6
+            })
+            
+            Nexus:CreateCorner(sliderTrack, 2)
+            
+            local sliderFill = Nexus:CreateElement("Frame", {
+                Parent = sliderTrack,
+                BackgroundColor3 = theme.Accent,
+                Size = UDim2.new(0, 0, 1, 0),
+                ZIndex = 7
+            })
+            
+            Nexus:CreateCorner(sliderFill, 2)
+            
+            local sliderKnob = Nexus:CreateElement("Frame", {
+                Parent = sliderTrack,
+                BackgroundColor3 = theme.Text,
+                Size = UDim2.new(0, 12, 0, 12),
+                Position = UDim2.new(0, -6, 0.5, -6),
+                ZIndex = 8
+            })
+            
+            Nexus:CreateCorner(sliderKnob, 6)
+            
+            local min = config.Min or 0
+            local max = config.Max or 100
+            local value = config.Default or min
+            local dragging = false
+            
+            local function updateSlider()
+                local percentage = (value - min) / (max - min)
+                Nexus:Tween(sliderFill, {Size = UDim2.new(percentage, 0, 1, 0)}, 0.1)
+                Nexus:Tween(sliderKnob, {Position = UDim2.new(percentage, -6, 0.5, -6)}, 0.1)
+                valueLabel.Text = tostring(math.floor(value * 100) / 100)
+                Nexus:SafeCallback(config.Callback, value)
+            end
+            
+            sliderTrack.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                    local percentage = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
+                    value = min + (max - min) * percentage
+                    updateSlider()
+                end
+            end)
+            
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local percentage = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
+                    value = min + (max - min) * percentage
+                    updateSlider()
+                end
+            end)
+            
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+            
+            updateSlider()
+            
+            local element = {
+                Type = "Slider",
+                Name = config.Name,
+                Instance = sliderFrame,
+                GetValue = function() return value end,
+                SetValue = function(newValue)
+                    value = math.clamp(newValue, min, max)
+                    updateSlider()
+                end
+            }
+            
+            table.insert(tab.Elements, element)
+            table.insert(Nexus.SavedElements, element)
+            return sliderFrame
+        end
+        
+        function TabElements:Dropdown(config)
+            local theme = Nexus:GetTheme()
+            local dropdownFrame = Nexus:CreateElement("Frame", {
+                Parent = tabContent,
+                BackgroundColor3 = theme.Secondary,
+                BackgroundTransparency = 0.2,
+                Size = UDim2.new(1, 0, 0, 40),
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            Nexus:CreateCorner(dropdownFrame, 8)
+            Nexus:CreateStroke(dropdownFrame, theme.Border, 1)
+            
+            local dropdownLabel = Nexus:CreateElement("TextLabel", {
+                Parent = dropdownFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0.5, 0, 1, 0),
+                Position = UDim2.new(0, 15, 0, 0),
+                Font = Enum.Font.GothamSemibold,
+                Text = config.Name or "Dropdown",
+                TextColor3 = theme.Text,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 6
+            })
+            
+            local dropdownButton = Nexus:CreateElement("TextButton", {
+                Parent = dropdownFrame,
+                BackgroundColor3 = theme.Border,
+                BackgroundTransparency = 0.3,
+                Size = UDim2.new(0.45, 0, 0, 25),
+                Position = UDim2.new(0.52, 0, 0.5, -12.5),
+                Font = Enum.Font.Gotham,
+                Text = config.Default or (config.Options and config.Options[1]) or "Select",
+                TextColor3 = theme.Text,
+                TextSize = 12,
+                ZIndex = 6
+            })
+            
+            Nexus:CreateCorner(dropdownButton, 6)
+            
+            local dropdownArrow = Nexus:CreateElement("TextLabel", {
+                Parent = dropdownButton,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 20, 1, 0),
+                Position = UDim2.new(1, -20, 0, 0),
+                Font = Enum.Font.GothamBold,
+                Text = "▼",
+                TextColor3 = theme.TextSecondary,
+                TextSize = 10,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 7
+            })
+            
+            local dropdownList = Nexus:CreateElement("Frame", {
+                Parent = dropdownFrame,
+                BackgroundColor3 = theme.Primary,
+                BackgroundTransparency = 0.1,
+                Size = UDim2.new(0.45, 0, 0, 0),
+                Position = UDim2.new(0.52, 0, 1, 5),
+                Visible = false,
+                ZIndex = 10
+            })
+            
+            Nexus:CreateCorner(dropdownList, 6)
+            Nexus:CreateStroke(dropdownList, theme.Border, 1)
+            
+            local listLayout = Nexus:CreateElement("UIListLayout", {
+                Parent = dropdownList,
+                SortOrder = Enum.SortOrder.LayoutOrder
+            })
+            
+            local isOpen = false
+            local selectedValue = config.Default or (config.Options and config.Options[1]) or ""
+            
+            local function toggleDropdown()
+                isOpen = not isOpen
+                dropdownList.Visible = isOpen
+                
+                if isOpen then
+                    local optionCount = #(config.Options or {})
+                    local listHeight = math.min(optionCount * 30, 150)
+                    Nexus:Tween(dropdownList, {Size = UDim2.new(0.45, 0, 0, listHeight)}, 0.2)
+                    Nexus:Tween(dropdownArrow, {Rotation = 180}, 0.2)
+                else
+                    Nexus:Tween(dropdownList, {Size = UDim2.new(0.45, 0, 0, 0)}, 0.2)
+                    Nexus:Tween(dropdownArrow, {Rotation = 0}, 0.2)
+                end
+            end
+            
+            dropdownButton.MouseButton1Click:Connect(toggleDropdown)
+            
+            local function populateOptions()
+                for _, child in pairs(dropdownList:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        child:Destroy()
+                    end
+                end
+                
+                for i, option in pairs(config.Options or {}) do
+                    local optionButton = Nexus:CreateElement("TextButton", {
+                        Parent = dropdownList,
+                        BackgroundColor3 = theme.Secondary,
+                        BackgroundTransparency = 0.3,
+                        Size = UDim2.new(1, 0, 0, 30),
+                        Font = Enum.Font.Gotham,
+                        Text = tostring(option),
+                        TextColor3 = theme.Text,
+                        TextSize = 12,
+                        ZIndex = 11,
+                        LayoutOrder = i
+                    })
+                    
+                    optionButton.MouseButton1Click:Connect(function()
+                        selectedValue = option
+                        dropdownButton.Text = tostring(option)
+                        toggleDropdown()
+                        Nexus:SafeCallback(config.Callback, option)
+                        Nexus:PlaySound("6895079853", 0.1)
+                    end)
+                    
+                    optionButton.MouseEnter:Connect(function()
+                        Nexus:Tween(optionButton, {BackgroundTransparency = 0.1}, 0.1)
+                    end)
+                    
+                    optionButton.MouseLeave:Connect(function()
+                        Nexus:Tween(optionButton, {BackgroundTransparency = 0.3}, 0.1)
+                    end)
+                end
+            end
+            
+            populateOptions()
+            
+            local element = {
+                Type = "Dropdown",
+                Name = config.Name,
+                Instance = dropdownFrame,
+                GetValue = function() return selectedValue end,
+                SetValue = function(newValue)
+                    selectedValue = newValue
+                    dropdownButton.Text = tostring(newValue)
+                end
+            }
+            
+            table.insert(tab.Elements, element)
+            table.insert(Nexus.SavedElements, element)
+            return dropdownFrame
+        end
+        
+        function TabElements:Input(config)
+            local theme = Nexus:GetTheme()
+            local inputFrame = Nexus:CreateElement("Frame", {
+                Parent = tabContent,
+                BackgroundColor3 = theme.Secondary,
+                BackgroundTransparency = 0.2,
+                Size = UDim2.new(1, 0, 0, 40),
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            Nexus:CreateCorner(inputFrame, 8)
+            Nexus:CreateStroke(inputFrame, theme.Border, 1)
+            
+            local inputLabel = Nexus:CreateElement("TextLabel", {
+                Parent = inputFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0.4, 0, 1, 0),
+                Position = UDim2.new(0, 15, 0, 0),
+                Font = Enum.Font.GothamSemibold,
+                Text = config.Name or "Input",
+                TextColor3 = theme.Text,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 6
+            })
+            
+            local textBox = Nexus:CreateElement("TextBox", {
+                Parent = inputFrame,
+                BackgroundColor3 = theme.Border,
+                BackgroundTransparency = 0.3,
+                Size = UDim2.new(0.55, 0, 0, 25),
+                Position = UDim2.new(0.42, 0, 0.5, -12.5),
+                Font = Enum.Font.Gotham,
+                Text = config.Default or "",
+                PlaceholderText = config.Placeholder or "Enter text...",
+                PlaceholderColor3 = theme.TextSecondary,
+                TextColor3 = theme.Text,
+                TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ClearTextOnFocus = false,
+                ZIndex = 6
+            })
+            
+            Nexus:CreateCorner(textBox, 6)
+            
+            local padding = Nexus:CreateElement("UIPadding", {
+                Parent = textBox,
+                PaddingLeft = UDim.new(0, 8),
+                PaddingRight = UDim.new(0, 8)
+            })
+            
+            textBox.FocusLost:Connect(function()
+                Nexus:SafeCallback(config.Callback, textBox.Text)
+            end)
+            
+            textBox.Focused:Connect(function()
+                Nexus:Tween(textBox, {BackgroundTransparency = 0.1}, 0.2)
+            end)
+            
+            textBox.FocusLost:Connect(function()
+                Nexus:Tween(textBox, {BackgroundTransparency = 0.3}, 0.2)
+            end)
+            
+            local element = {
+                Type = "Input",
+                Name = config.Name,
+                Instance = inputFrame,
+                GetValue = function() return textBox.Text end,
+                SetValue = function(newValue)
+                    textBox.Text = tostring(newValue)
+                end
+            }
+            
+            table.insert(tab.Elements, element)
+            table.insert(Nexus.SavedElements, element)
+            return inputFrame
+        end
+        
+        function TabElements:Label(config)
+            local theme = Nexus:GetTheme()
+            local labelFrame = Nexus:CreateElement("Frame", {
+                Parent = tabContent,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 25),
+                ZIndex = 5,
+                LayoutOrder = #tab.Elements + 1
+            })
+            
+            local label = Nexus:CreateElement("TextLabel", {
+                Parent = labelFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -20, 1, 0),
+                Position = UDim2.new(0, 10, 0, 0),
+                Font = Enum.Font.Gotham,
+                Text = config.Text or "Label",
+                TextColor3 = theme.TextSecondary,
+                TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextWrapped = true,
+                ZIndex = 6
+            })
+            
+            table.insert(tab.Elements, {Type = "Label", Name = config.Text, Instance = labelFrame})
+            return labelFrame
+        end
+        
+        return TabElements
+    end
+    
+    return Library
+end
+
+return Nexus
